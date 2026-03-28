@@ -1,27 +1,14 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { validateAuth } from '../middleware/validateAuth';
+import { submitFeedback, getUserFeedback, getSessionFeedback, getFeedbackAnalytics } from '../controllers/feedbackController';
 
 const router = Router();
 
-// Submit feedback
-router.post('/', validateAuth, asyncHandler(async (req, res) => {
-  res.json({ message: 'Submit feedback - to be implemented' });
-}));
-
-// Get user feedback
-router.get('/user', validateAuth, asyncHandler(async (req, res) => {
-  res.json({ message: 'Get user feedback - to be implemented' });
-}));
-
-// Get feedback for session
-router.get('/session/:sessionId', validateAuth, asyncHandler(async (req, res) => {
-  res.json({ message: 'Get session feedback - to be implemented' });
-}));
-
-// Get feedback analytics
-router.get('/analytics', validateAuth, asyncHandler(async (req, res) => {
-  res.json({ message: 'Get feedback analytics - to be implemented' });
-}));
+// Feedback routes
+router.post('/', validateAuth, asyncHandler(submitFeedback));
+router.get('/user', validateAuth, asyncHandler(getUserFeedback));
+router.get('/session/:sessionId', validateAuth, asyncHandler(getSessionFeedback));
+router.get('/analytics', validateAuth, asyncHandler(getFeedbackAnalytics));
 
 export { router as feedbackRoutes };

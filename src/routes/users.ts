@@ -1,20 +1,20 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { validateAuth } from '../middleware/validateAuth';
+import { getProfile, updateProfile } from '../controllers/authController';
 
 const router = Router();
 
-// Placeholder for user routes
-router.get('/profile', validateAuth, asyncHandler(async (req, res) => {
-  res.json({ message: 'Get user profile - to be implemented' });
-}));
+// User routes
+router.get('/profile', validateAuth, asyncHandler(getProfile));
+router.put('/profile', validateAuth, asyncHandler(updateProfile));
 
-router.put('/profile', validateAuth, asyncHandler(async (req, res) => {
-  res.json({ message: 'Update user profile - to be implemented' });
-}));
-
+// TODO: Implement user progress endpoint
 router.get('/progress', validateAuth, asyncHandler(async (req, res) => {
-  res.json({ message: 'Get user progress - to be implemented' });
+  res.json({ 
+    message: 'Get user progress - to be implemented',
+    progress: []
+  });
 }));
 
 export { router as userRoutes };

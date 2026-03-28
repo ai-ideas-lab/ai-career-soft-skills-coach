@@ -1,29 +1,14 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { createError } from '../middleware/errorHandler';
-import { validateAuth } from '../middleware/validateAuth';
+import { register, login, getProfile, updateProfile, logout } from '../controllers/authController';
 
 const router = Router();
 
-// Placeholder for authentication routes
-router.post('/register', asyncHandler(async (req, res) => {
-  // TODO: Implement user registration
-  res.json({ message: 'Registration endpoint - to be implemented' });
-}));
-
-router.post('/login', asyncHandler(async (req, res) => {
-  // TODO: Implement user login
-  res.json({ message: 'Login endpoint - to be implemented' });
-}));
-
-router.get('/me', validateAuth, asyncHandler(async (req, res) => {
-  // TODO: Get current user profile
-  res.json({ message: 'Get current user - to be implemented' });
-}));
-
-router.post('/logout', validateAuth, asyncHandler(async (req, res) => {
-  // TODO: Implement logout
-  res.json({ message: 'Logout endpoint - to be implemented' });
-}));
+// Authentication routes
+router.post('/register', asyncHandler(register));
+router.post('/login', asyncHandler(login));
+router.get('/me', asyncHandler(getProfile));
+router.put('/profile', asyncHandler(updateProfile));
+router.post('/logout', asyncHandler(logout));
 
 export { router as authRoutes };
