@@ -1,0 +1,171 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sessions   Session[]
+  progress   Progress[]
+  feedback   Feedback[]
+  scenarios  Scenario[]
+
+  @@map("users")
+}
+
+model Scenario {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  category    String
+  difficulty  Int      @default(1)
+  duration    Int      @default(10) // in minutes
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  sessions    Session[]
+  progress    Progress[]
+  feedback    Feedback[]
+  dialogues   Dialogue[]
+  questions   Question[]
+  options     Option[]
+
+  @@map("scenarios")
+}
+
+model Dialogue {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  role        String   // "user" | "ai"
+  content     String
+  timestamp   Int      // order in dialogue
+  createdAt   DateTime @default(now())
+
+  // Relations
+  scenario Scenario @relation(fields: [scenarioId], references: [id])
+  responses Response[]
+
+  @@map("dialogues")
+}
+
+model Question {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  content     String
+  order       Int
+  createdAt   DateTime @default(now())
+
+  // Relations
+  scenario Scenario @relation(fields: [scenarioId], references: [id])
+  options   Option[]
+  responses Response[]
+
+  @@map("questions")
+}
+
+model Option {
+  id          String   @id @default(cuid())
+  questionId  String
+  content     String
+  isCorrect   Boolean  @default(false)
+  order       Int
+  createdAt   DateTime @default(now())
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id])
+  responses Response[]
+
+  @@map("options")
+}
+
+model Response {
+  id          String   @id @default(cuid())
+  dialogueId  String?
+  questionId  String?
+  optionId    String?
+  content     String
+  score       Int      @default(0)
+  feedback    String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  dialogue Dialogue? @relation(fields: [dialogueId], references: [id])
+  question Question? @relation(fields: [questionId], references: [id])
+  option   Option?   @relation(fields: [optionId], references: [id])
+
+  @@map("responses")
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  scenarioId  String
+  status      String   @default("active") // "active" | "completed" | "paused"
+  startTime   DateTime @default(now())
+  endTime     DateTime?
+  score       Int      @default(0)
+  progress    Float    @default(0.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id])
+  scenario Scenario @relation(fields: [scenarioId], references: [id])
+  progress Progress[]
+  feedback Feedback[]
+
+  @@map("sessions")
+}
+
+model Progress {
+  id          String   @id @default(cuid())
+  userId      String
+  scenarioId  String
+  sessionId   String?
+  completed   Boolean  @default(false)
+  score       Int      @default(0)
+  timeSpent   Int      @default(0) // in seconds
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id])
+  scenario Scenario  @relation(fields: [scenarioId], references: [id])
+  session  Session?  @relation(fields: [sessionId], references: [id])
+
+  @@unique([userId, scenarioId])
+  @@map("progress")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  sessionId String
+  content   String
+  rating    Int      @default(5) // 1-5 stars
+  category  String?  // "dialogue" | "response" | "overall"
+  createdAt DateTime @default(now())
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id])
+  session Session  @relation(fields: [sessionId], references: [id])
+
+  @@map("feedback")
+}
