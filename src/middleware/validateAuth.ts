@@ -17,7 +17,7 @@ export const validateAuth = (req: AuthRequest, res: Response, next: NextFunction
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret' as any) as any;
     req.user = decoded;
     next();
   } catch (error) {
@@ -30,7 +30,7 @@ export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction
   
   if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret' as any) as any;
       req.user = decoded;
     } catch (error) {
       // Continue without authentication

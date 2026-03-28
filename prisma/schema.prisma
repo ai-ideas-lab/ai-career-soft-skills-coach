@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -23,7 +23,6 @@ model User {
   sessions   Session[]
   progress   Progress[]
   feedback   Feedback[]
-  scenarios  Scenario[]
 
   @@map("users")
 }
@@ -42,10 +41,8 @@ model Scenario {
   // Relations
   sessions    Session[]
   progress    Progress[]
-  feedback    Feedback[]
   dialogues   Dialogue[]
   questions   Question[]
-  options     Option[]
 
   @@map("scenarios")
 }
@@ -128,7 +125,6 @@ model Session {
   // Relations
   user     User      @relation(fields: [userId], references: [id])
   scenario Scenario @relation(fields: [scenarioId], references: [id])
-  progress Progress[]
   feedback Feedback[]
 
   @@map("sessions")
@@ -148,7 +144,6 @@ model Progress {
   // Relations
   user     User      @relation(fields: [userId], references: [id])
   scenario Scenario  @relation(fields: [scenarioId], references: [id])
-  session  Session?  @relation(fields: [sessionId], references: [id])
 
   @@unique([userId, scenarioId])
   @@map("progress")

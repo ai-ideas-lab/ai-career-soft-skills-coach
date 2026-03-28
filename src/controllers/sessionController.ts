@@ -1,60 +1,85 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/validateAuth';
+import { PrismaClient } from '@prisma/client';
+import { createError } from '../middleware/errorHandler';
+
+const prisma = new PrismaClient();
 
 export const startSession = async (req: AuthRequest, res: Response) => {
   try {
     const { scenarioId } = req.body;
-    const userId = req.user!.id;
 
     if (!scenarioId) {
-      return res.status(400).json({ error: 'Scenario ID is required' });
+      throw createError('Scenario ID is required', 400);
     }
 
-    // TODO: Validate scenario exists
-    // TODO: Check if user has already started this scenario
-    // TODO: Create session in database
+    // Check if scenario exists
+    const scenario = await prisma.scenario.findUnique({
+      where: { id: scenarioId }
+    });
 
-    const session = {
-      id: Date.now().toString(),
-      userId,
-      scenarioId,
-      status: 'active',
-      startTime: new Date().toISOString(),
-      endTime: null,
-      score: 0,
-      progress: 0.0,
-      createdAt: new Date().toISOString(),
-    };
+    if (!scenario) {
+      throw createError('Scenario not found', 404);
+    }
+
+    // Create new session
+    const session = await prisma.session.create({
+      data: {
+        userId: req.user!.id,
+        scenarioId,
+        status: 'active',
+        startTime: new Date(),
+      },
+      include: {
+        scenario: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
 
     res.status(201).json({ 
       session,
       message: 'Session started successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to start session' });
+    if (error instanceof Error && error.message.includes('required')) {
+      res.status(400).json({ error: error.message });
+    } else if (error instanceof Error && error.message.includes('Scenario not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to start session' });
+    }
   }
 };
 
 export const getSession = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.id;
 
-    // TODO: Fetch session from database and verify ownership
-    const session = {
-      id,
-      userId,
-      scenarioId: '1',
-      status: 'active',
-      startTime: new Date().toISOString(),
-      endTime: null,
-      score: 0,
-      progress: 0.0,
-      createdAt: new Date().toISOString(),
-    };
+    const session = await prisma.session.findUnique({
+      where: { id },
+      include: {
+        scenario: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        },
+        feedback: {
+          orderBy: { createdAt: 'desc' }
+        }
+      },
+    });
 
     if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
+      throw createError('Session not found', 404);
     }
 
     res.json({ 
@@ -62,7 +87,11 @@ export const getSession = async (req: AuthRequest, res: Response) => {
       message: 'Session retrieved successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve session' });
+    if (error instanceof Error && error.message.includes('Session not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to retrieve session' });
+    }
   }
 };
 
@@ -70,52 +99,70 @@ export const updateSessionProgress = async (req: AuthRequest, res: Response) => 
   try {
     const { id } = req.params;
     const { progress, score } = req.body;
-    const userId = req.user!.id;
 
-    // TODO: Update session in database
-    const updatedSession = {
-      id,
-      userId,
-      scenarioId: '1',
-      status: 'active',
-      startTime: new Date().toISOString(),
-      endTime: null,
-      score: score || 0,
-      progress: progress || 0.0,
-      updatedAt: new Date().toISOString(),
-    };
+    if (progress === undefined) {
+      throw createError('Progress value is required', 400);
+    }
+
+    const session = await prisma.session.update({
+      where: { id },
+      data: {
+        progress: parseFloat(progress),
+        ...(score !== undefined && { score }),
+        updatedAt: new Date(),
+      },
+      include: {
+        scenario: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
 
     res.json({ 
-      session: updatedSession,
+      session,
       message: 'Session progress updated successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update session progress' });
+    if (error instanceof Error && error.message.includes('Progress value is required')) {
+      res.status(400).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to update session progress' });
+    }
   }
 };
 
 export const completeSession = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { score, feedback } = req.body;
-    const userId = req.user!.id;
+    const { score, finalProgress } = req.body;
 
-    // TODO: Complete session in database
-    const completedSession = {
-      id,
-      userId,
-      scenarioId: '1',
-      status: 'completed',
-      startTime: new Date().toISOString(),
-      endTime: new Date().toISOString(),
-      score: score || 0,
-      progress: 1.0,
-      feedback,
-      completedAt: new Date().toISOString(),
-    };
+    const session = await prisma.session.update({
+      where: { id },
+      data: {
+        status: 'completed',
+        endTime: new Date(),
+        ...(score !== undefined && { score }),
+        ...(finalProgress !== undefined && { progress: parseFloat(finalProgress) }),
+      },
+      include: {
+        scenario: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
 
     res.json({ 
-      session: completedSession,
+      session,
       message: 'Session completed successfully'
     });
   } catch (error) {
@@ -125,37 +172,32 @@ export const completeSession = async (req: AuthRequest, res: Response) => {
 
 export const getUserSessions = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user!.id;
+    const { limit = 10, status } = req.query;
 
-    // TODO: Fetch user sessions from database
-    const sessions = [
-      {
-        id: '1',
-        userId,
-        scenarioId: '1',
-        status: 'completed',
-        startTime: new Date(Date.now() - 86400000).toISOString(),
-        endTime: new Date(Date.now() - 86400000 + 3600000).toISOString(),
-        score: 85,
-        progress: 1.0,
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-      },
-      {
-        id: '2',
-        userId,
-        scenarioId: '2',
-        status: 'active',
-        startTime: new Date(Date.now() - 3600000).toISOString(),
-        endTime: null,
-        score: 0,
-        progress: 0.6,
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-      },
-    ];
+    const where: any = {
+      userId: req.user!.id,
+    };
+    if (status) where.status = status;
+
+    const sessions = await prisma.session.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit as string),
+      include: {
+        scenario: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            difficulty: true,
+          }
+        }
+      }
+    });
 
     res.json({ 
       sessions,
-      total: sessions.length,
+      count: sessions.length,
       message: 'User sessions retrieved successfully'
     });
   } catch (error) {

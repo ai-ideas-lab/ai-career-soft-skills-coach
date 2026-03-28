@@ -10,7 +10,7 @@ router.get('/profile', validateAuth, asyncHandler(getProfile));
 router.put('/profile', validateAuth, asyncHandler(updateProfile));
 
 // TODO: Implement user progress endpoint
-router.get('/progress', validateAuth, asyncHandler(async (req, res) => {
+router.get('/progress', validateAuth, asyncHandler(async (req: any, res: any) => {
   res.json({ 
     message: 'Get user progress - to be implemented',
     progress: []

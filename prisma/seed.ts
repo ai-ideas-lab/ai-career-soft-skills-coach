@@ -1,47 +1,43 @@
 import { PrismaClient } from '@prisma/client';
-import { categories, scenarios, dialogues, questions, options } from './data';
+import { scenarios } from './data';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Create users
-  const adminUser = await prisma.user.create({
-    data: {
-      email: 'admin@aiideaslab.com',
-      password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi.', // password
-      name: 'Admin User',
-    },
-  });
-
-  // Create categories
-  for (const category of categories) {
-    await prisma.category.create({
-      data: category,
+  // Check if admin user exists, create if not
+  try {
+    const existingAdmin = await prisma.user.findUnique({
+      where: { email: 'admin@aiideaslab.com' }
     });
+    
+    if (!existingAdmin) {
+      await prisma.user.create({
+        data: {
+          email: 'admin@aiideaslab.com',
+          password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi.', // password
+          name: 'Admin User',
+        },
+      });
+      console.log('✅ Admin user created');
+    } else {
+      console.log('✅ Admin user already exists');
+    }
+  } catch (error) {
+    console.log('⚠️  Could not create admin user:', error.message);
   }
 
   // Create scenarios
   for (const scenario of scenarios) {
-    await prisma.scenario.create({
-      data: {
-        ...scenario,
-        dialogues: {
-          create: dialogues.filter(d => d.scenarioId === scenario.id),
-        },
-        questions: {
-          create: questions
-            .filter(q => q.scenarioId === scenario.id)
-            .map(q => ({
-              ...q,
-              options: {
-                create: options.filter(o => o.questionId === q.id),
-              },
-            })),
-        },
-      },
-    });
+    try {
+      await prisma.scenario.create({
+        data: scenario,
+      });
+      console.log(`✅ Created scenario: ${scenario.title}`);
+    } catch (error) {
+      console.log(`⚠️  Could not create scenario ${scenario.title}:`, error.message);
+    }
   }
 
   console.log('✅ Database seeded successfully!');

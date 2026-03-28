@@ -3,6 +3,9 @@ import { AuthRequest } from '../middleware/validateAuth';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { createError } from '../middleware/errorHandler';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export const register = async (req: AuthRequest, res: Response) => {
   try {
@@ -12,24 +15,40 @@ export const register = async (req: AuthRequest, res: Response) => {
       throw createError('Email, password, and name are required', 400);
     }
 
-    // TODO: Check if user already exists
-    // TODO: Hash password
-    // TODO: Save user to database
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      throw createError('User with this email already exists', 409);
+    }
+
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = {
-      id: Date.now().toString(),
-      email,
-      name,
-      avatar: null,
-      createdAt: new Date().toISOString(),
-    };
+    // Save user to database
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        avatar: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        createdAt: true,
+      }
+    });
 
     // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      process.env.JWT_SECRET || 'fallback-secret' as any,
+      { expiresIn: process.env.JWT_EXPIRES_IN ? parseInt(process.env.JWT_EXPIRES_IN) : '7d' }
     );
 
     res.status(201).json({ 
@@ -40,6 +59,8 @@ export const register = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     if (error instanceof Error && error.message.includes('required')) {
       res.status(400).json({ error: error.message });
+    } else if (error instanceof Error && error.message.includes('already exists')) {
+      res.status(409).json({ error: error.message });
     } else {
       res.status(500).json({ error: 'Failed to register user' });
     }
@@ -54,30 +75,46 @@ export const login = async (req: AuthRequest, res: Response) => {
       throw createError('Email and password are required', 400);
     }
 
-    // TODO: Find user by email
-    // TODO: Verify password
-    // TODO: Generate JWT token
-    const user = {
-      id: '1',
-      email,
-      name: 'Test User',
-      avatar: null,
-    };
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
 
+    if (!user) {
+      throw createError('Invalid email or password', 401);
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw createError('Invalid email or password', 401);
+    }
+
+    // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      process.env.JWT_SECRET || 'fallback-secret' as any,
+      { expiresIn: process.env.JWT_EXPIRES_IN ? parseInt(process.env.JWT_EXPIRES_IN) : '7d' }
     );
 
+    const userResponse = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+    };
+
     res.json({ 
-      user,
+      user: userResponse,
       token,
       message: 'User logged in successfully'
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('required')) {
       res.status(400).json({ error: error.message });
+    } else if (error instanceof Error && error.message.includes('Invalid email or password')) {
+      res.status(401).json({ error: error.message });
     } else {
       res.status(500).json({ error: 'Failed to login user' });
     }
@@ -88,21 +125,33 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
 
-    // TODO: Fetch user profile from database
-    const user = {
-      id: userId,
-      email: 'user@example.com',
-      name: 'Test User',
-      avatar: null,
-      createdAt: new Date().toISOString(),
-    };
+    // Fetch user profile from database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        createdAt: true,
+        updatedAt: true,
+      }
+    });
+
+    if (!user) {
+      throw createError('User not found', 404);
+    }
 
     res.json({ 
       user,
       message: 'Profile retrieved successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve profile' });
+    if (error instanceof Error && error.message.includes('User not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to retrieve profile' });
+    }
   }
 };
 
@@ -111,14 +160,21 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
     const { name, avatar } = req.body;
 
-    // TODO: Update user profile in database
-    const updatedUser = {
-      id: userId,
-      email: 'user@example.com',
-      name: name || 'Updated User',
-      avatar: avatar || null,
-      updatedAt: new Date().toISOString(),
-    };
+    // Update user profile in database
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(name && { name }),
+        ...(avatar !== undefined && { avatar }),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        updatedAt: true,
+      }
+    });
 
     res.json({ 
       user: updatedUser,

@@ -10,6 +10,7 @@ import { userRoutes } from './routes/users';
 import { scenarioRoutes } from './routes/scenarios';
 import { sessionRoutes } from './routes/sessions';
 import { feedbackRoutes } from './routes/feedback';
+import aiRoutes from './routes/ai';
 
 // Load environment variables
 dotenv.config();
@@ -58,6 +59,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/scenarios', scenarioRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Error handling
 app.use(errorHandler);

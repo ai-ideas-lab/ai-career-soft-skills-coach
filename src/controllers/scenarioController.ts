@@ -1,33 +1,27 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/validateAuth';
+import { PrismaClient } from '@prisma/client';
+import { createError } from '../middleware/errorHandler';
+
+const prisma = new PrismaClient();
 
 export const getScenarios = async (req: AuthRequest, res: Response) => {
   try {
-    // TODO: Fetch from database
-    const scenarios = [
-      {
-        id: '1',
-        title: 'Team Meeting Conflict Resolution',
-        description: 'Practice resolving conflicts and maintaining professionalism in team meetings',
-        category: 'communication',
-        difficulty: 2,
-        duration: 15,
-        isActive: true,
-      },
-      {
-        id: '2',
-        title: 'Client Presentation Feedback',
-        description: 'Learn to deliver constructive feedback to clients during presentation reviews',
-        category: 'communication',
-        difficulty: 3,
-        duration: 20,
-        isActive: true,
-      },
-    ];
+    const { category, difficulty, limit = 20 } = req.query;
+    
+    const where: any = {};
+    if (category) where.category = category;
+    if (difficulty) where.difficulty = parseInt(difficulty as string);
+    
+    const scenarios = await prisma.scenario.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit as string),
+    });
 
     res.json({ 
       scenarios,
-      total: scenarios.length,
+      count: scenarios.length,
       message: 'Scenarios retrieved successfully'
     });
   } catch (error) {
@@ -39,44 +33,25 @@ export const getScenario = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     
-    // TODO: Fetch from database
-    const scenario = {
-      id,
-      title: 'Team Meeting Conflict Resolution',
-      description: 'Practice resolving conflicts and maintaining professionalism in team meetings',
-      category: 'communication',
-      difficulty: 2,
-      duration: 15,
-      isActive: true,
-      dialogues: [
-        {
-          id: '1',
-          role: 'user',
-          content: 'I think we should implement Feature A first.',
-          timestamp: 1,
+    const scenario = await prisma.scenario.findUnique({
+      where: { id },
+      include: {
+        dialogues: {
+          orderBy: { timestamp: 'asc' },
         },
-        {
-          id: '2',
-          role: 'ai',
-          content: 'I understand your point. However, Feature B has technical dependencies.',
-          timestamp: 2,
+        questions: {
+          include: {
+            options: {
+              orderBy: { order: 'asc' },
+            },
+          },
+          orderBy: { order: 'asc' },
         },
-      ],
-      questions: [
-        {
-          id: '1',
-          content: 'How would you respond to the concern about losing market opportunity?',
-          options: [
-            { id: '1', content: 'Insist on Feature A immediately', isCorrect: false },
-            { id: '2', content: 'Find a middle ground that balances both', isCorrect: true },
-            { id: '3', content: 'Pause the entire project', isCorrect: false },
-          ],
-        },
-      ],
-    };
+      },
+    });
 
     if (!scenario) {
-      return res.status(404).json({ error: 'Scenario not found' });
+      throw createError('Scenario not found', 404);
     }
 
     res.json({ 
@@ -84,63 +59,107 @@ export const getScenario = async (req: AuthRequest, res: Response) => {
       message: 'Scenario retrieved successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve scenario' });
+    if (error instanceof Error && error.message.includes('Scenario not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to retrieve scenario' });
+    }
   }
 };
 
 export const createScenario = async (req: AuthRequest, res: Response) => {
   try {
-    // TODO: Implement scenario creation with validation
-    const { title, description, category, difficulty, duration } = req.body;
+    const { title, description, category, difficulty, duration, dialogues, questions } = req.body;
 
     if (!title || !description || !category) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      throw createError('Title, description, and category are required', 400);
     }
 
-    // TODO: Save to database
-    const newScenario = {
-      id: Date.now().toString(),
-      title,
-      description,
-      category,
-      difficulty: difficulty || 1,
-      duration: duration || 10,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    };
+    const scenario = await prisma.scenario.create({
+      data: {
+        title,
+        description,
+        category,
+        difficulty: difficulty || 1,
+        duration: duration || 10,
+        dialogues: dialogues ? {
+          create: dialogues,
+        } : undefined,
+        questions: questions ? {
+          create: questions.map((q: any, index: number) => ({
+            content: q.content,
+            order: index + 1,
+            options: q.options ? {
+              create: q.options,
+            } : undefined,
+          })),
+        } : undefined,
+      },
+      include: {
+        dialogues: true,
+        questions: {
+          include: {
+            options: true,
+          },
+        },
+      },
+    });
 
     res.status(201).json({ 
-      scenario: newScenario,
+      scenario,
       message: 'Scenario created successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create scenario' });
+    if (error instanceof Error && error.message.includes('required')) {
+      res.status(400).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to create scenario' });
+    }
   }
 };
 
 export const updateScenario = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, description, category, difficulty, duration, isActive } = req.body;
+    const { title, description, category, difficulty, duration } = req.body;
 
-    // TODO: Update scenario in database
-    const updatedScenario = {
-      id,
-      title: title || 'Updated Scenario',
-      description: description || 'Updated description',
-      category: category || 'general',
-      difficulty: difficulty || 1,
-      duration: duration || 10,
-      isActive: isActive !== undefined ? isActive : true,
-      updatedAt: new Date().toISOString(),
-    };
+    const existingScenario = await prisma.scenario.findUnique({
+      where: { id }
+    });
+
+    if (!existingScenario) {
+      throw createError('Scenario not found', 404);
+    }
+
+    const scenario = await prisma.scenario.update({
+      where: { id },
+      data: {
+        ...(title && { title }),
+        ...(description && { description }),
+        ...(category && { category }),
+        ...(difficulty !== undefined && { difficulty }),
+        ...(duration !== undefined && { duration }),
+      },
+      include: {
+        dialogues: true,
+        questions: {
+          include: {
+            options: true,
+          },
+        },
+      },
+    });
 
     res.json({ 
-      scenario: updatedScenario,
+      scenario,
       message: 'Scenario updated successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update scenario' });
+    if (error instanceof Error && error.message.includes('Scenario not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to update scenario' });
+    }
   }
 };
 
@@ -148,11 +167,26 @@ export const deleteScenario = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
 
-    // TODO: Delete scenario from database
+    const existingScenario = await prisma.scenario.findUnique({
+      where: { id }
+    });
+
+    if (!existingScenario) {
+      throw createError('Scenario not found', 404);
+    }
+
+    await prisma.scenario.delete({
+      where: { id }
+    });
+
     res.json({ 
-      message: `Scenario ${id} deleted successfully`
+      message: 'Scenario deleted successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete scenario' });
+    if (error instanceof Error && error.message.includes('Scenario not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to delete scenario' });
+    }
   }
 };

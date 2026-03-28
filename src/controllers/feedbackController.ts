@@ -1,68 +1,109 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/validateAuth';
+import { PrismaClient } from '@prisma/client';
+import { createError } from '../middleware/errorHandler';
+
+const prisma = new PrismaClient();
 
 export const submitFeedback = async (req: AuthRequest, res: Response) => {
   try {
     const { sessionId, content, rating, category } = req.body;
-    const userId = req.user!.id;
 
     if (!sessionId || !content || !rating) {
-      return res.status(400).json({ error: 'Session ID, content, and rating are required' });
+      throw createError('Session ID, content, and rating are required', 400);
+    }
+
+    // Check if session exists and belongs to user
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId: req.user!.id
+      }
+    });
+
+    if (!session) {
+      throw createError('Session not found or access denied', 404);
     }
 
     if (rating < 1 || rating > 5) {
-      return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+      throw createError('Rating must be between 1 and 5', 400);
     }
 
-    // TODO: Save feedback to database
-    const feedback = {
-      id: Date.now().toString(),
-      userId,
-      sessionId,
-      content,
-      rating,
-      category,
-      createdAt: new Date().toISOString(),
-    };
+    const feedback = await prisma.feedback.create({
+      data: {
+        userId: req.user!.id,
+        sessionId,
+        content,
+        rating,
+        category,
+      },
+      include: {
+        session: {
+          select: {
+            id: true,
+            scenario: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+              }
+            }
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
 
     res.status(201).json({ 
       feedback,
       message: 'Feedback submitted successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to submit feedback' });
+    if (error instanceof Error && error.message.includes('required')) {
+      res.status(400).json({ error: error.message });
+    } else if (error instanceof Error && error.message.includes('Session not found')) {
+      res.status(404).json({ error: error.message });
+    } else if (error instanceof Error && error.message.includes('Rating must be')) {
+      res.status(400).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to submit feedback' });
+    }
   }
 };
 
 export const getUserFeedback = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user!.id;
+    const { limit = 20 } = req.query;
 
-    // TODO: Fetch user feedback from database
-    const feedback = [
-      {
-        id: '1',
-        userId,
-        sessionId: '1',
-        content: 'Great scenario! Really helped me understand conflict resolution.',
-        rating: 5,
-        category: 'overall',
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-      },
-      {
-        id: '2',
-        userId,
-        sessionId: '2',
-        content: 'The AI responses were a bit too slow.',
-        rating: 3,
-        category: 'response-time',
-        createdAt: new Date(Date.now() - 172800000).toISOString(),
-      },
-    ];
+    const feedback = await prisma.feedback.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit as string),
+      include: {
+        session: {
+          select: {
+            id: true,
+            scenario: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+              }
+            }
+          }
+        }
+      }
+    });
 
     res.json({ 
       feedback,
-      total: feedback.length,
+      count: feedback.length,
       message: 'User feedback retrieved successfully'
     });
   } catch (error) {
@@ -73,61 +114,99 @@ export const getUserFeedback = async (req: AuthRequest, res: Response) => {
 export const getSessionFeedback = async (req: AuthRequest, res: Response) => {
   try {
     const { sessionId } = req.params;
-    const userId = req.user!.id;
 
-    // TODO: Fetch session feedback from database
-    const feedback = [
-      {
-        id: '1',
-        userId,
-        sessionId,
-        content: 'Very helpful for practicing difficult conversations.',
-        rating: 4,
-        category: 'dialogue',
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-      },
-    ];
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId: req.user!.id
+      }
+    });
+
+    if (!session) {
+      throw createError('Session not found or access denied', 404);
+    }
+
+    const feedback = await prisma.feedback.findMany({
+      where: { sessionId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      }
+    });
 
     res.json({ 
       feedback,
-      total: feedback.length,
+      count: feedback.length,
       message: 'Session feedback retrieved successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve session feedback' });
+    if (error instanceof Error && error.message.includes('Session not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to retrieve session feedback' });
+    }
   }
 };
 
 export const getFeedbackAnalytics = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user!.id;
+    const { startDate, endDate } = req.query;
 
-    // TODO: Calculate analytics from feedback data
+    const where: any = {};
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate as string);
+      if (endDate) where.createdAt.lte = new Date(endDate as string);
+    }
+
+    const [feedback, avgRating, totalRatings, categoryBreakdown] = await Promise.all([
+      prisma.feedback.findMany({
+        where: { ...where, userId: req.user!.id },
+        include: {
+          session: {
+            select: {
+              id: true,
+              scenario: {
+                select: {
+                  id: true,
+                  title: true,
+                  category: true,
+                }
+              }
+            }
+          }
+        }
+      }),
+      prisma.feedback.aggregate({
+        where: { ...where, userId: req.user!.id },
+        _avg: { rating: true }
+      }),
+      prisma.feedback.count({
+        where: { ...where, userId: req.user!.id }
+      }),
+      prisma.feedback.groupBy({
+        by: ['category'],
+        where: { ...where, userId: req.user!.id, category: { not: null } },
+        _count: { id: true },
+        _avg: { rating: true }
+      })
+    ]);
+
     const analytics = {
-      totalSessions: 10,
-      averageRating: 4.2,
-      ratingDistribution: {
-        5: 6,
-        4: 3,
-        3: 1,
-        2: 0,
-        1: 0,
-      },
-      categoryBreakdown: {
-        'dialogue': 8,
-        'response-time': 1,
-        'overall': 1,
-      },
-      recentFeedback: [
-        {
-          id: '1',
-          sessionId: '10',
-          content: 'Excellent scenario design',
-          rating: 5,
-          category: 'overall',
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-        },
-      ],
+      totalFeedback: feedback.length,
+      averageRating: avgRating._avg.rating || 0,
+      totalRatings,
+      categoryBreakdown,
+      recentFeedback: feedback.slice(0, 5),
+      period: {
+        startDate: startDate || null,
+        endDate: endDate || null,
+      }
     };
 
     res.json({ 
