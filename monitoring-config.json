@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0",
+  "name": "AI Career Soft Skills Coach - Performance Monitoring",
+  "description": "生产环境性能监控配置",
+  "metrics": {
+    "system": {
+      "enabled": true,
+      "interval": 60000,
+      "metrics": ["cpu", "memory", "disk", "network"]
+    },
+    "application": {
+      "enabled": true,
+      "interval": 30000,
+      "metrics": ["response_time", "error_rate", "request_count", "active_connections"]
+    },
+    "database": {
+      "enabled": true,
+      "interval": 30000,
+      "metrics": ["query_time", "connection_count", "slow_queries"]
+    }
+  },
+  "alerts": {
+    "cpu_usage": {
+      "warning": 70,
+      "critical": 90,
+      "enabled": true
+    },
+    "memory_usage": {
+      "warning": 80,
+      "critical": 95,
+      "enabled": true
+    },
+    "response_time": {
+      "warning": 1000,
+      "critical": 5000,
+      "enabled": true
+    },
+    "error_rate": {
+      "warning": 5,
+      "critical": 10,
+      "enabled": true
+    },
+    "database_connections": {
+      "warning": 80,
+      "critical": 95,
+      "enabled": true
+    }
+  },
+  "logging": {
+    "level": "info",
+    "file": "logs/performance.log",
+    "max_size": "10MB",
+    "max_files": 5
+  },
+  "storage": {
+    "retention": {
+      "metrics": "30d",
+      "logs": "7d",
+      "alerts": "90d"
+    }
+  }
+}

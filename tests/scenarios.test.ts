@@ -9,9 +9,16 @@ describe('Scenarios API', () => {
   let userToken: string;
 
   beforeEach(async () => {
-    // Clean up database
-    await prisma.user.deleteMany();
+    // Clean up database - handle foreign key constraints
+    await prisma.feedback.deleteMany();
+    await prisma.progress.deleteMany();
+    await prisma.response.deleteMany();
+    await prisma.option.deleteMany();
+    await prisma.question.deleteMany();
+    await prisma.dialogue.deleteMany();
+    await prisma.session.deleteMany();
     await prisma.scenario.deleteMany();
+    await prisma.user.deleteMany();
 
     // Create admin user
     const adminResponse = await request(app)
@@ -35,8 +42,15 @@ describe('Scenarios API', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany();
+    await prisma.feedback.deleteMany();
+    await prisma.progress.deleteMany();
+    await prisma.response.deleteMany();
+    await prisma.option.deleteMany();
+    await prisma.question.deleteMany();
+    await prisma.dialogue.deleteMany();
+    await prisma.session.deleteMany();
     await prisma.scenario.deleteMany();
+    await prisma.user.deleteMany();
     await prisma.$disconnect();
   });
 
